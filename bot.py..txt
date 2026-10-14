@@ -1,0 +1,147 @@
+import telebot
+from telebot import types
+import random
+
+# Вставте свій токен від @BotFather замість тексту всередині лапок:
+TOKEN = "8896144568:AAF5hdyQkoR-xah6gxrZFk_Phsdn2k5ouXg"
+
+bot = telebot.TeleBot(TOKEN)
+
+# Наші ролі у лабораторному стилі
+ROLE_NAMES = {
+    "bacteriophage": "🦠 Бактерія (Маньяк — здійснює таємні зараження)",
+    "antiseptic": "🧪 Антисептик (Лікар — захищає від зараження)",
+    "lab_assistant": "🔬 Лаборант (Мирний житель — шукає порушників)",
+    "head_researcher": "🕵️ Завідувач лабораторії (Шериф — перевіряє статус інших)",
+    "annoying_student": "🏃‍♂️ Бісячий студент (Відволікає гравця та скасовує його дію)"
+}
+
+game_players = {}
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(
+        message,
+        "🥼 Вітаю у науковій лабораторії Мафії!\n\n"
+        "Додайте мене у груповий чат та напишіть там /game, щоб зібрати команду!",
+        parse_mode="Markdown"
+    )
+
+@bot.message_handler(commands=['game'])
+def start_game_collection(message):
+    global game_players
+    game_players.clear()
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🧬 Приєднатися до експерименту", callback_data="join_game"))
+    markup.add(types.InlineKeyboardButton("🚀 Роздати ролі (Старт)", callback_data="start_game"))
+    
+    bot.send_message(
+        message.chat.id,
+        "🧪 Розпочато збір учасників у лабораторію!\n\nНатискайте кнопку нижче, щоб долучитися:",
+        reply_markup=markup
+    )
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    global game_players
+    
+    if call.data == "join_game":
+        user_id = call.from_user.id
+        user_name = call.from_user.full_name
+        
+        if user_id in game_players:
+            bot.answer_callback_query(call.id, "Ви вже берете участь в експерименті!", show_alert=True)
+        else:
+            game_players[user_id] = user_name
+            bot.answer_callback_query(call.id, "Успішно! Ви в списку учасників.")
+            
+            names_list = "\n".join([f"• {name}" for name in game_players.values()])
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🧬 Приєднатися до експерименту", callback_data="join_game"))
+            markup.add(types.InlineKeyboardButton("🚀 Роздати ролі (Старт)", callback_data="start_game"))
+            
+            try:
+                bot.edit_message_text(
+                    f"🧪 Збір учасників триває...\n\nЗареєстровано гравців ({len(game_players)}):\n{names_list}",
+                    call.message.chat.id,
+                    call.message.message_id,
+                    reply_markup=markup
+                )
+            except Exception:
+                pass
+
+    elif call.data == "start_game":
+        if len(game_players) < 3:
+            bot.answer_callback_query(call.id, "⚠️ Потрібно мінімум 3 гравці для початку!", show_alert=True)
+            return
+            
+        players_ids = list(game_players.keys())
+        roles_pool = list(ROLE_NAMES.keys())
+        
+        assigned_roles = []
+        for i in range(len(players_ids)):
+            if i < len(roles_pool):
+                assigned_roles.append(roles_pool[i])
+            else:
+                assigned_roles.append("lab_assistant")
+                
+        random.shuffle(assigned_roles)
+        
+        for index, user_id in enumerate(players_ids):
+            role_key = assigned_roles[index]
+            role_full_name = ROLE_NAMES[role_key]
+            try:
+                bot.send_message(
+                    user_id,
+                    f"🥼 Ваша секретна роль у цій партії:\n\n{role_full_name}\n\nТримайте це в таємниці!"
+                )
+            except Exception:
+                pass
+                
+        bot.edit_message_text(
+            "🔬 Експеримент розпочато!\n\nРолі успішно роздані гравцям у приватні повідомлення.",
+            call.message.chat.id,
+            call.message.message_id
+        )
+        game_players.clear()
+
+GUIDE_TEXT = """
+🥼 ОФІЦІЙНИЙ ГАЙД: НАУКОВА ЛАБОРАТОРІЯ МАФІЇ 🧪
+
+Вітаємо у лавах дослідників! Цей бот проводить інтерактивну рольову гру «Мафія» в атмосфері біологічної лабораторії.
+
+---
+
+📋 ЯК ПОЧАТИ ГРУ:
+
+1️⃣ Підготовка: Переконайтеся, що кожен гравець перейшов у приватні повідомлення до цього бота та натиснув кнопку Start (або надіслав /start). Це необхідно для таємного отримання ролей!
+2️⃣ Додавання: Додайте бота у свій груповий чат.
+3️⃣ Збір: У груповому чаті напишіть команду /game.
+4️⃣ Реєстрація: Натискайте кнопку «🧬 Приєднатися до експерименту».
+5️⃣ Старт: Коли збереться команда (від 3 учасників), натисніть «🚀 Роздати ролі (Старт)». Бот надішле кожному його таємний статус у приватні повідомлення!
+
+---
+
+🧬 РЕЄСТР ЛАБОРАТОРНИХ РОЛЕЙ:
+
+🦠 Бактерія *(Шкідник)* — здійснює таємне зараження дослідників.
+🧪 Антисептик *(Захисник)* — проводить дезінфекцію та нейтралізує загрозу.
+🕵️ Завідувач лабораторії *(Аналітик)* — проводить перевірки та вираховує біологічні загрози.
+🏃‍♂️ Бісячий студент *(Хаос)* — відволікає персональний склад та плутає плани.
+🔬 Лаборант *(Дослідник)* — шукає порушників шляхом обговорення та голосування.
+
+---
+
+🕹️ КОМАНДИ:
+• /start або /help — Інструкція та офіційний гайд.
+• /game — Розпочати новий експеримент у груповому чаті.
+"""
+
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    bot.reply_to(message, GUIDE_TEXT, parse_mode="Markdown")
+
+if __name__ == "__main__":
+    print("Бот успішно запущений!")
+    bot.infinity_polling()
